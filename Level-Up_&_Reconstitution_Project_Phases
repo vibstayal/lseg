@@ -1,0 +1,17 @@
+1st Phase
+• It is a project which process and parses the yearly data from different vendors and list the top 100 companies in the Stock Market
+• Gather the data from different Vendors like Bloomberg, Data Scope via FTP, SFTP, Network Share location, S3
+• Parse different types of files using various services and insert the data in SQL DB
+• Application re-architecting and redesigning to make application cloud-native and highly available
+• Use of various AWS services - S3, Glacier, Auto
+Scaling, Certificate Manager, Cloud formation, Cloud Trail, Cloud Watch, Directory Service, EFS, Elastic Beanstalk, IAM, Route 53, System Manager, Trusted Advisor, SQS, SNS, EC2, VPC, OpsWork
+• Use of Encryption in S3, RDS, S3 Replication, Active Directory, Elastic Beanstalk Certificate Binding
+• Setup SSRS Reporting tool
+• At the end year of Recon, specific rules will determine the top companies in the Stock Market
+
+2nd Phase
+• Use of Lambda for various services to make application serverless and cost-optimized
+• Lambda will be triggered by SQS when it received any event from cloud watch or Notification from SQS
+• Services will poll the message from SQS at a regular interval of time on a daily basis to start Lambda logic for getting the files from FTP in S3 & start the parsing of data to insert in SQL DB
+• Use of API Gateway as a Front End to point Lambda functions
+• Use of S3 as a Static Web hosting Page with API Gateway linked
