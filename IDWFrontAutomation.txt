@@ -1,0 +1,981 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+	"Metadata" : {
+  "AWS::CloudFormation::Interface" : {
+    "ParameterGroups" : [
+      {
+        "Label" : { "default" : "API Gateway Configuration" },
+        "Parameters" : [ "IDWApiName", "IDWApiResourceName1","HttpMethod1","IDWApiResourceName2","HttpMethod2","IDWApiResourceName3","HttpMethod3","IDWApiResourceName4","HttpMethod4","IDWApiStageName"]
+      },
+      {
+        "Label" : { "default":"Lambda Configuration" },
+        "Parameters" : [ "LambdaFunctionName" ]
+      },
+
+
+		{
+        "Label" : { "default":"Cognito Configuration" },
+        "Parameters" : [ "UserPoolName","IdentityPoolName"]
+      }
+    ]
+     }
+},
+    "Description": "IDW Front End with APIGateway,Lambda and Cognito Service",
+
+	"Parameters" : {
+	"IDWApiStageName": {
+      "Description": "The API Deployable Stage Name",
+      "Type": "String",
+      "Default": "v01",
+	  "AllowedPattern" : "[a-zA-Z0-9]*" 
+    },
+	"IDWApiName":{
+	  "Description": "The IDW APIGateway Name",
+      "Type": "String",
+      "Default": "IDW",
+	  "AllowedPattern" : "[a-zA-Z0-9]*" 
+	},
+	"IDWApiResourceName1":{
+	  "Description": "The IDWApiGateway Resource 1",
+      "Type": "String",
+      "Default": "closeconstituentlist",
+	  "AllowedPattern" : "[a-zA-Z0-9]*" 
+	},
+	"HttpMethod1":{
+	  "Description": "The IDWApiGateway Method 1",
+      "Type": "String",
+      "Default": "GET",
+	  "AllowedValues" : [ "GET", "POST"]
+	},
+	"IDWApiResourceName2":{
+	  "Description": "The IDWApiGateway Resource 2",
+      "Type": "String",
+      "Default": "closeconstituentposition",
+	  "AllowedPattern" : "[a-zA-Z0-9]*" 
+	},
+	"HttpMethod2":{
+	  "Description": "The IDWApiGateway Method 2",
+      "Type": "String",
+      "Default": "GET",
+	  "AllowedValues" : [ "GET", "POST"]
+	},
+	"IDWApiResourceName3":{
+	  "Description": "The IDWApiGateway Resource 3",
+      "Type": "String",
+      "Default": "closeindexlevels",
+	  "AllowedPattern" : "[a-zA-Z0-9]*" 
+	},
+	"HttpMethod3":{
+	  "Description": "The IDWApiGateway Method 3",
+      "Type": "String",
+      "Default": "GET",
+	  "AllowedValues" : [ "GET", "POST"]
+	},
+	"IDWApiResourceName4":{
+	  "Description": "The IDWApiGateway Resource 4",
+      "Type": "String",
+      "Default": "indexmaster",
+	  "AllowedPattern" : "[a-zA-Z0-9]*" 
+	},
+	"HttpMethod4":{
+	  "Description": "The IDWApiGateway Method 4",
+      "Type": "String",
+      "Default": "GET",
+	  "AllowedValues" : [ "GET", "POST"]
+	},
+	"LambdaFunctionName":{
+	  "Description": "Lambda Function Name",
+      "Type": "String",
+      "Default": "IDWService",
+	  "AllowedPattern" : "[a-zA-Z0-9]*"
+	},
+	"UserPoolName": {
+			"Description": "Cognito UserPool Name",
+            "Type": "String",
+			"Default": "IDWUserPool"
+        },
+		"IdentityPoolName": {
+			"Description": "Cognito IdentityPool Name",
+            "Type": "String",
+			"Default": "IDWIdentityPool"
+        }
+		
+	},
+    "Resources": {
+        "IDWApiGatewayCloudWatchRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "apigateway.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "Path": "/",
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs"
+                ]
+            },
+            "DependsOn": [
+                "IDWApiMainStageLogGroup"
+            ]
+        },
+        "IDWApiGatewayAccount": {
+            "Type": "AWS::ApiGateway::Account",
+            "Properties": {
+                "CloudWatchRoleArn": {
+                    "Fn::GetAtt": [
+                        "IDWApiGatewayCloudWatchRole",
+                        "Arn"
+                    ]
+                }
+            }
+        },
+        "IDWApi": {
+            "Type": "AWS::ApiGateway::RestApi",
+            "Properties": {
+                "Name": {"Ref": "IDWApiName"},
+                "Description": "An IDW REST API"
+            }
+        },
+        "IDWApiDeployment": {
+            "Type": "AWS::ApiGateway::Deployment",
+            "Properties": {
+                "RestApiId": {
+                    "Ref": "IDWApi"
+                }	
+            },
+            "DependsOn": [
+                "IDWApiMethod1","IDWApiMethod2","IDWApiMethod3","IDWApiMethod4"
+            ]
+        },
+        "IDWApiMainStageLogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+                "LogGroupName": {
+                    "Fn::Sub": [
+                        "IDW-API-Gateway-Execution-Logs_IDW/${IDWApiStageName}",
+                        {
+                            "StageName": {
+                                 "Ref" : "IDWApiStageName"
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        "IDWApiStage": {
+            "Type": "AWS::ApiGateway::Stage",
+            "Properties": {
+                "DeploymentId": {
+                    "Ref": "IDWApiDeployment"
+                },
+                "MethodSettings": [
+                    {
+                        "ResourcePath": "",
+                        "HttpMethod": "*/*",
+                        "DataTraceEnabled": true,
+                        "LoggingLevel": "INFO",
+                        "MetricsEnabled": false
+                    }
+                ],
+                "RestApiId": {
+                    "Ref": "IDWApi"
+                },
+                "StageName": {
+                     "Ref" : "IDWApiStageName"
+                }
+            },
+            "DependsOn": [
+                "IDWApiMainStageLogGroup"
+            ]
+        },
+         
+        "IDWApiResource1": {
+            "Type": "AWS::ApiGateway::Resource",
+            "Properties": {
+                "ParentId": {
+                    "Fn::GetAtt": [
+                        "IDWApi",
+                        "RootResourceId"
+                    ]
+                },
+                "PathPart": {"Ref": "IDWApiResourceName1"},
+                "RestApiId": {
+                    "Ref": "IDWApi"
+                }
+            }
+        },
+		 "IDWApiResource2": {
+            "Type": "AWS::ApiGateway::Resource",
+            "Properties": {
+                "ParentId": {
+                    "Fn::GetAtt": [
+                        "IDWApi",
+                        "RootResourceId"
+                    ]
+                },
+                "PathPart": {"Ref": "IDWApiResourceName2"},
+                "RestApiId": {
+                    "Ref": "IDWApi"
+                }
+            }
+        },
+		 "IDWApiResource3": {
+            "Type": "AWS::ApiGateway::Resource",
+            "Properties": {
+                "ParentId": {
+                    "Fn::GetAtt": [
+                        "IDWApi",
+                        "RootResourceId"
+                    ]
+                },
+                "PathPart": {"Ref": "IDWApiResourceName3"},
+                "RestApiId": {
+                    "Ref": "IDWApi"
+                }
+            }
+        },
+		 "IDWApiResource4": {
+            "Type": "AWS::ApiGateway::Resource",
+            "Properties": {
+                "ParentId": {
+                    "Fn::GetAtt": [
+                        "IDWApi",
+                        "RootResourceId"
+                    ]
+                },
+                "PathPart": {"Ref": "IDWApiResourceName4"},
+                "RestApiId": {
+                    "Ref": "IDWApi"
+                }
+            }
+        },
+        "IDWLambdaFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Description": "IDWService",
+                "Handler": "index.handler",
+                "MemorySize": 128,
+                "Role": {
+                    "Fn::GetAtt": [
+                        "IDWLambdaCognitoIAMFunctionRole",
+                        "Arn"
+                    ]
+                },
+				"FunctionName" : {"Ref" : "LambdaFunctionName"},
+                "Code": {
+                    "S3Bucket" : "lambdacode",
+					"S3Key" : "index.zip"
+                },
+                "Runtime": "nodejs6.10",
+                "Timeout": "300"
+            }
+        },
+        "IDWLambdaCognitoIAMFunctionRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "lambda.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+				"RoleName" : "IDW-Lambda-Cognito-Role",
+                "Path": "/"
+            }
+        },
+        "IDWLambdaFunctionRoleActions": {
+            "Type": "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": "IDWLambdaFunctionRoleActions",
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+								"logs:CreateLogGroup",
+                                "logs:CreateLogStream",
+                                "logs:PutLogEvents",
+								"cognito-identity:GetOpenIdTokenForDeveloperIdentity",
+								"cognito-identity:LookupDeveloperIdentity",
+								"cognito-identity:MergeDeveloperIdentities",
+								"cognito-identity:UnlinkDeveloperIdentity",
+								"logs:PutLogEvents",
+								"ec2:CreateNetworkInterface",
+								"ec2:DescribeNetworkInterfaces",
+								"ec2:DeleteNetworkInterface"
+                            ],
+                            "Resource": "*"
+                        }
+                    ]
+                },
+                "Roles": [
+                    {
+                        "Ref": "IDWLambdaCognitoIAMFunctionRole"
+                    }
+                ]
+            }
+        },
+        "IDWLambdaFunctionLogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+                "LogGroupName": {
+                    "Fn::Sub": "/aws/lambda/IDWService"
+                }
+            }
+        },
+		"IDWOPTIONS1": {
+        "Type": "AWS::ApiGateway::Method",
+        "Properties": {
+            "ResourceId": {
+                "Ref": "IDWApiResource1"
+            },
+            "RestApiId": {
+                "Ref": "IDWApi"
+            },
+            "AuthorizationType": "NONE",
+            "HttpMethod": "OPTIONS",
+            "Integration": {
+                "Type": "MOCK",
+                "IntegrationResponses": [
+                    {
+                        "ResponseParameters": {
+                            "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'",
+                            "method.response.header.Access-Control-Allow-Methods": "'GET,POST,OPTIONS'",
+                            "method.response.header.Access-Control-Allow-Origin": "'*'"
+                        },
+                        "ResponseTemplates": {
+                            "application/json": ""
+                        },
+                        "StatusCode": "200"
+                    }
+                ],
+                "PassthroughBehavior": "NEVER",
+                "RequestTemplates": {
+                    "application/json": "{\"statusCode\": 200}"
+                }
+            },
+            "MethodResponses": [
+                {
+                    "ResponseModels": {
+                        "application/json": "Empty"
+                    },
+                    "ResponseParameters": {
+                        "method.response.header.Access-Control-Allow-Headers": true,
+                        "method.response.header.Access-Control-Allow-Methods": true,
+                        "method.response.header.Access-Control-Allow-Origin": true
+                    },
+                    "StatusCode": "200"
+                }
+            ]
+        }
+    },
+        "IDWApiMethod1": {
+            "Type": "AWS::ApiGateway::Method",
+            "Properties": {
+                "AuthorizationType": "AWS_IAM",
+                "ResourceId": {
+                    "Ref": "IDWApiResource1"
+                },
+                "RestApiId": {
+                    "Ref": "IDWApi"
+                },
+                "HttpMethod": {"Ref" :"HttpMethod1"},
+                "Integration": {
+                    "IntegrationHttpMethod": "POST",
+                    "IntegrationResponses": [
+                        {
+                            "StatusCode": "200",
+                            "SelectionPattern": ""
+                        }
+                    ],
+                    "PassthroughBehavior": "WHEN_NO_TEMPLATES",
+					
+	
+  				
+								"RequestTemplates": {
+										"application/json" : "{\n   \"body\" : $input.json('$'),\n   \"headers\": {\n    #foreach($header in $input.params().header.keySet())\n     \"$header\": \"$util.escapeJavaScript($input.params().header.get($header))\" #if($foreach.hasNext),#end\n\n     #end\n    },\n    \"method\": \"$context.httpMethod\",\n   \"params\": {\n    #foreach($param in $input.params().path.keySet())\n    \"$param\": \"$util.escapeJavaScript($input.params().path.get($param))\" #if($foreach.hasNext),#end\n\n     #end\n   },\n   \"query\": {\n    #foreach($queryParam in $input.params().querystring.keySet())\n    \"$queryParam\": \"$util.escapeJavaScript($input.params().querystring.get($queryParam))\" #if($foreach.hasNext),#end\n\n     #end\n   }\n }"
+												},
+                    "Type": "AWS",
+                    "Uri": {
+                         "Fn::Sub": "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${IDWLambdaFunction.Arn}/invocations"
+                    }
+                },
+                "MethodResponses": [
+                    {
+                        "StatusCode": "200"
+                    }
+                ]
+            },
+            "DependsOn": [
+                "IDWApiMethodLambdaPermission"
+            ]
+        },
+		"IDWOPTIONS2": {
+        "Type": "AWS::ApiGateway::Method",
+        "Properties": {
+            "ResourceId": {
+                "Ref": "IDWApiResource2"
+            },
+            "RestApiId": {
+                "Ref": "IDWApi"
+            },
+            "AuthorizationType": "NONE",
+            "HttpMethod": "OPTIONS",
+            "Integration": {
+                "Type": "MOCK",
+                "IntegrationResponses": [
+                    {
+                        "ResponseParameters": {
+                            "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'",
+                            "method.response.header.Access-Control-Allow-Methods": "'GET,POST,OPTIONS'",
+                            "method.response.header.Access-Control-Allow-Origin": "'*'"
+                        },
+                        "ResponseTemplates": {
+                            "application/json": ""
+                        },
+                        "StatusCode": "200"
+                    }
+                ],
+                "PassthroughBehavior": "NEVER",
+                "RequestTemplates": {
+                    "application/json": "{\"statusCode\": 200}"
+                }
+            },
+            "MethodResponses": [
+                {
+                    "ResponseModels": {
+                        "application/json": "Empty"
+                    },
+                    "ResponseParameters": {
+                        "method.response.header.Access-Control-Allow-Headers": true,
+                        "method.response.header.Access-Control-Allow-Methods": true,
+                        "method.response.header.Access-Control-Allow-Origin": true
+                    },
+                    "StatusCode": "200"
+                }
+            ]
+        }
+    },
+        "IDWApiMethod2": {
+            "Type": "AWS::ApiGateway::Method",
+            "Properties": {
+                "AuthorizationType": "AWS_IAM",
+                "ResourceId": {
+                    "Ref": "IDWApiResource2"
+                },
+                "RestApiId": {
+                    "Ref": "IDWApi"
+                },
+                "HttpMethod": {
+                    "Ref" :"HttpMethod2"
+                },
+                "Integration": {
+                    "IntegrationHttpMethod": "POST",
+                    "IntegrationResponses": [
+                        {
+                            "StatusCode": "200",
+                            "SelectionPattern": ""
+                        }
+                    ],
+                    "PassthroughBehavior": "WHEN_NO_TEMPLATES",
+					
+	
+  				
+								"RequestTemplates": {
+										"application/json" : "{\n  \"body\" : $input.json('$'),\n   \"headers\": {\n    #foreach($header in $input.params().header.keySet())\n     \"$header\": \"$util.escapeJavaScript($input.params().header.get($header))\" #if($foreach.hasNext),#end\n\n     #end\n    },\n    \"method\": \"$context.httpMethod\",\n   \"params\": {\n    #foreach($param in $input.params().path.keySet())\n    \"$param\": \"$util.escapeJavaScript($input.params().path.get($param))\" #if($foreach.hasNext),#end\n\n     #end\n   },\n   \"query\": {\n    #foreach($queryParam in $input.params().querystring.keySet())\n    \"$queryParam\": \"$util.escapeJavaScript($input.params().querystring.get($queryParam))\" #if($foreach.hasNext),#end\n\n     #end\n   }\n }"
+												},
+                    "Type": "AWS",
+                    "Uri": {
+                         "Fn::Sub": "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${IDWLambdaFunction.Arn}/invocations"
+                    }
+                },
+                "MethodResponses": [
+                    {
+                        "StatusCode": "200"
+                    }
+                ]
+            },
+            "DependsOn": [
+                "IDWApiMethodLambdaPermission"
+            ]
+        },
+		"IDWOPTIONS3": {
+        "Type": "AWS::ApiGateway::Method",
+        "Properties": {
+            "ResourceId": {
+                "Ref": "IDWApiResource3"
+            },
+            "RestApiId": {
+                "Ref": "IDWApi"
+            },
+            "AuthorizationType": "NONE",
+            "HttpMethod": "OPTIONS",
+            "Integration": {
+                "Type": "MOCK",
+                "IntegrationResponses": [
+                    {
+                        "ResponseParameters": {
+                            "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'",
+                            "method.response.header.Access-Control-Allow-Methods": "'GET,POST,OPTIONS'",
+                            "method.response.header.Access-Control-Allow-Origin": "'*'"
+                        },
+                        "ResponseTemplates": {
+                            "application/json": ""
+                        },
+                        "StatusCode": "200"
+                    }
+                ],
+                "PassthroughBehavior": "NEVER",
+                "RequestTemplates": {
+                    "application/json": "{\"statusCode\": 200}"
+                }
+            },
+            "MethodResponses": [
+                {
+                    "ResponseModels": {
+                        "application/json": "Empty"
+                    },
+                    "ResponseParameters": {
+                        "method.response.header.Access-Control-Allow-Headers": true,
+                        "method.response.header.Access-Control-Allow-Methods": true,
+                        "method.response.header.Access-Control-Allow-Origin": true
+                    },
+                    "StatusCode": "200"
+                }
+            ]
+        }
+    },
+        "IDWApiMethod3": {
+            "Type": "AWS::ApiGateway::Method",
+            "Properties": {
+                "AuthorizationType": "AWS_IAM",
+                "ResourceId": {
+                    "Ref": "IDWApiResource3"
+                },
+                "RestApiId": {
+                    "Ref": "IDWApi"
+                },
+                "HttpMethod": {
+                    "Ref" :"HttpMethod3"
+                },
+                "Integration": {
+                    "IntegrationHttpMethod": "POST",
+                    "IntegrationResponses": [
+                        {
+                            "StatusCode": "200",
+                            "SelectionPattern": ""
+                        }
+                    ],
+                    "PassthroughBehavior": "WHEN_NO_TEMPLATES",
+					
+	
+  				
+								"RequestTemplates": {
+										"application/json" : "{\n  \"body\" : $input.json('$'),\n   \"headers\": {\n    #foreach($header in $input.params().header.keySet())\n     \"$header\": \"$util.escapeJavaScript($input.params().header.get($header))\" #if($foreach.hasNext),#end\n\n     #end\n    },\n    \"method\": \"$context.httpMethod\",\n   \"params\": {\n    #foreach($param in $input.params().path.keySet())\n    \"$param\": \"$util.escapeJavaScript($input.params().path.get($param))\" #if($foreach.hasNext),#end\n\n     #end\n   },\n   \"query\": {\n    #foreach($queryParam in $input.params().querystring.keySet())\n    \"$queryParam\": \"$util.escapeJavaScript($input.params().querystring.get($queryParam))\" #if($foreach.hasNext),#end\n\n     #end\n   }\n }"
+												},
+                    "Type": "AWS",
+                    "Uri": {
+                         "Fn::Sub": "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${IDWLambdaFunction.Arn}/invocations"
+                    }
+                },
+                "MethodResponses": [
+                    {
+                        "StatusCode": "200"
+                    }
+                ]
+            },
+            "DependsOn": [
+                "IDWApiMethodLambdaPermission"
+            ]
+        },
+		"IDWOPTIONS4": {
+        "Type": "AWS::ApiGateway::Method",
+        "Properties": {
+            "ResourceId": {
+                "Ref": "IDWApiResource4"
+            },
+            "RestApiId": {
+                "Ref": "IDWApi"
+            },
+            "AuthorizationType": "NONE",
+            "HttpMethod": "OPTIONS",
+            "Integration": {
+                "Type": "MOCK",
+                "IntegrationResponses": [
+                    {
+                        "ResponseParameters": {
+                            "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'",
+                            "method.response.header.Access-Control-Allow-Methods": "'GET,POST,OPTIONS'",
+                            "method.response.header.Access-Control-Allow-Origin": "'*'"
+                        },
+                        "ResponseTemplates": {
+                            "application/json": ""
+                        },
+                        "StatusCode": "200"
+                    }
+                ],
+                "PassthroughBehavior": "NEVER",
+                "RequestTemplates": {
+                    "application/json": "{\"statusCode\": 200}"
+                }
+            },
+            "MethodResponses": [
+                {
+                    "ResponseModels": {
+                        "application/json": "Empty"
+                    },
+                    "ResponseParameters": {
+                        "method.response.header.Access-Control-Allow-Headers": true,
+                        "method.response.header.Access-Control-Allow-Methods": true,
+                        "method.response.header.Access-Control-Allow-Origin": true
+                    },
+                    "StatusCode": "200"
+                }
+            ]
+        }
+    },
+        "IDWApiMethod4": {
+            "Type": "AWS::ApiGateway::Method",
+            "Properties": {
+                "AuthorizationType": "AWS_IAM",
+                "ResourceId": {
+                    "Ref": "IDWApiResource4"
+                },
+                "RestApiId": {
+                    "Ref": "IDWApi"
+                },
+                "HttpMethod": {
+                    "Ref" :"HttpMethod4"
+                },
+                "Integration": {
+                    "IntegrationHttpMethod": "POST",
+                    "IntegrationResponses": [
+                        {
+                            "StatusCode": "200",
+                            "SelectionPattern": ""
+                        }
+                    ],
+                    "PassthroughBehavior": "WHEN_NO_TEMPLATES",
+					
+	
+  				
+								"RequestTemplates": {
+										"application/json" : "{\n  \"body\" : $input.json('$'),\n   \"headers\": {\n    #foreach($header in $input.params().header.keySet())\n     \"$header\": \"$util.escapeJavaScript($input.params().header.get($header))\" #if($foreach.hasNext),#end\n\n     #end\n    },\n    \"method\": \"$context.httpMethod\",\n   \"params\": {\n    #foreach($param in $input.params().path.keySet())\n    \"$param\": \"$util.escapeJavaScript($input.params().path.get($param))\" #if($foreach.hasNext),#end\n\n     #end\n   },\n   \"query\": {\n    #foreach($queryParam in $input.params().querystring.keySet())\n    \"$queryParam\": \"$util.escapeJavaScript($input.params().querystring.get($queryParam))\" #if($foreach.hasNext),#end\n\n     #end\n   }\n }"
+												},
+                    "Type": "AWS",
+                    "Uri": {
+                         "Fn::Sub": "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${IDWLambdaFunction.Arn}/invocations"
+                    }
+                },
+                "MethodResponses": [
+                    {
+                        "StatusCode": "200"
+                    }
+                ]
+            },
+            "DependsOn": [
+                "IDWApiMethodLambdaPermission"
+            ]
+        },
+		
+        "IDWApiMethodLambdaPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "IDWLambdaFunction"
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${IDWApi}/*/${IDWApiHttpMethod}/*",
+                        {
+                            "IDWApiHttpMethod": "GET"
+                        }
+                    ]
+                }
+            },
+            "DependsOn": [
+                "IDWLambdaFunctionRoleActions",
+                "IDWLambdaFunctionLogGroup"
+            ]
+        },
+		
+		
+		
+		
+		
+		
+		"UserPool": {
+            "Type": "AWS::Cognito::UserPool",
+            "Properties": {
+                "UserPoolName": {
+                    "Ref" : "UserPoolName"
+                },
+                "AdminCreateUserConfig": {
+                    "AllowAdminCreateUserOnly": false
+                },
+                "AutoVerifiedAttributes": [
+                    "email"
+                ],
+                
+                "Policies": {
+                    "PasswordPolicy": {
+                        "MinimumLength": 8,
+                        "RequireLowercase": true,
+                        "RequireNumbers": true,
+                        "RequireSymbols": true,
+                        "RequireUppercase": true
+                    }
+                },
+                "Schema": [
+                    {
+                        "Name": "email",
+                        "AttributeDataType": "String",
+                        "DeveloperOnlyAttribute": false,
+                        "Mutable": true,
+                        "Required": true
+                    },
+                    {
+                        "Name": "preferred_username",
+                        "AttributeDataType": "String",
+                        "DeveloperOnlyAttribute": false,
+                        "Mutable": true,
+                        "Required": false
+                    }
+                ]
+            }
+        },
+	   
+		"UserPoolClient": {
+            "Type": "AWS::Cognito::UserPoolClient",
+            "Properties": {
+                "ClientName": "aladdin",
+                "GenerateSecret": false,
+                "RefreshTokenValidity": 30,
+                "UserPoolId": {
+                    "Ref": "UserPool"
+                }
+            }
+        },
+        "IdentityPool": {
+            "Type": "AWS::Cognito::IdentityPool",
+            "Properties": {
+                "AllowUnauthenticatedIdentities": false,
+                "IdentityPoolName": {
+                    
+                    "Ref" : "IdentityPoolName"
+                
+                },
+                "CognitoIdentityProviders": [
+                    {
+                        "ClientId": {
+                            "Ref": "UserPoolClient"
+                        },
+                        "ProviderName": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "cognito-idp.",
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    ".amazonaws.com/",
+                                    {
+                                        "Ref": "UserPool"
+                                    }
+                                ]
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "UnauthenticatedPolicy": {
+            "Type": "AWS::IAM::ManagedPolicy",
+            "Properties": {
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "mobileanalytics:PutEvents",
+                                "cognito-sync:*"
+                            ],
+                            "Resource": [
+                                "*"
+                            ]
+                        }
+                    ]
+                }
+            }
+        },
+        "UnauthenticatedRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+					
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": "sts:AssumeRoleWithWebIdentity",
+                            "Principal": {
+                                "Federated": "cognito-identity.amazonaws.com"
+                            },
+                            "Condition": {
+                                "StringEquals": {
+                                    "cognito-identity.amazonaws.com:aud": {
+                                        "Ref": "IdentityPool"
+                                    }
+                                },
+                                "ForAnyValue:StringLike": {
+                                    "cognito-identity.amazonaws.com:amr": "unauthenticated"
+                                }
+                            }
+                        }
+                    ]
+                },
+				"RoleName": {"Fn::Join" : ["_", ["Cognito",{"Ref" : "IdentityPoolName"},"UnauthRole"]]},
+                "ManagedPolicyArns": [
+                    {
+                        "Ref": "UnauthenticatedPolicy"
+                    }
+                ]
+            }
+        },
+        "AuthenticatedPolicy": {
+            "Type": "AWS::IAM::ManagedPolicy",
+            "Properties": {
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "mobileanalytics:PutEvents",
+                                "cognito-sync:*",
+                                "cognito-identity:*"
+                            ],
+                            "Resource": [
+                                "*"
+                            ]
+                        }
+                    ]
+                }
+            }
+        },
+        "AuthenticatedRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+					
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": "sts:AssumeRoleWithWebIdentity",
+                            "Principal": {
+                                "Federated": "cognito-identity.amazonaws.com"
+                            },
+                            "Condition": {
+                                "StringEquals": {
+                                    "cognito-identity.amazonaws.com:aud": {
+                                        "Ref": "IdentityPool"
+                                    }
+                                },
+                                "ForAnyValue:StringLike": {
+                                    "cognito-identity.amazonaws.com:amr": "authenticated"
+                                }
+                            }
+                        }
+                    ]
+                },
+				"RoleName": {"Fn::Join" : ["_", ["Cognito",{"Ref" : "IdentityPoolName"},"AuthRole"]]},
+                "ManagedPolicyArns": [
+                    {
+                        "Ref": "AuthenticatedPolicy"
+                    }
+                ]
+            }
+        },
+        "RoleAttachment": {
+            "Type": "AWS::Cognito::IdentityPoolRoleAttachment",
+            "Properties": {
+                "IdentityPoolId": {
+                    "Ref": "IdentityPool"
+                },
+                "Roles": {
+                    "unauthenticated": {
+                        "Fn::GetAtt": [
+                            "UnauthenticatedRole",
+                            "Arn"
+                        ]
+                    },
+                    "authenticated": {
+                        "Fn::GetAtt": [
+                            "AuthenticatedRole",
+                            "Arn"
+                        ]
+                    }
+                }
+            }
+        }
+    },
+    "Outputs": {
+        "IDWApiEndpoint1": {"Value": {"Fn::Sub": "https://${IDWApi}.execute-api.${AWS::Region}.amazonaws.com/${IDWApiStage}/closeconstituentlist/"}},
+		"IDWApiEndpoint2": {"Value": {"Fn::Sub": "https://${IDWApi}.execute-api.${AWS::Region}.amazonaws.com/${IDWApiStage}/closeconstituentposition/"}},
+		"IDWApiEndpoint3": {"Value": {"Fn::Sub": "https://${IDWApi}.execute-api.${AWS::Region}.amazonaws.com/${IDWApiStage}/closeindexlevels/"}},
+		"IDWApiEndpoint4": {"Value": {"Fn::Sub": "https://${IDWApi}.execute-api.${AWS::Region}.amazonaws.com/${IDWApiStage}/indexmaster/"}}	,
+		"UserPool": {
+            "Value": {
+                "Ref": "UserPool"
+            }
+        },
+        "UserPoolClient": {
+            "Value": {
+                "Ref": "UserPoolClient"
+            }
+        },
+        "IdentityPool": {
+            "Value": {
+                "Ref": "IdentityPool"
+            }
+        },
+        "UnauthenticatedRole": {
+            "Value": {
+                "Ref": "UnauthenticatedRole"
+            }
+        },
+        "AuthenticatedRole": {
+            "Value": {
+                "Ref": "AuthenticatedRole"
+            }
+        }		
+            }
+      }
+    

@@ -1,0 +1,377 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Parameters": {
+    "FTPVPC": {
+      "Description": "Select VPC for FTP EC2",
+      "Type": "AWS::EC2::VPC::Id"
+    },
+    "EC2Subnet": {
+      "Description": "Select Subnet for FTP EC2 ",
+      "Type": "AWS::EC2::Subnet::Id"
+    },
+    "ELBSubnet": {
+      "Description": "Select Subnet for FTP ELB",
+      "Type": "AWS::EC2::Subnet::Id"
+    },
+    "InstanceTypeFTP": {
+      "Description": "Select Type for EC2",
+      "Type": "String",
+      "Default": "m4.large",
+      "AllowedValues": [
+        "t1.micro",
+        "t2.micro",
+        "t2.small",
+        "t2.medium",
+        "m1.small",
+        "m1.medium",
+        "m1.large",
+        "m1.xlarge",
+        "m2.xlarge",
+        "m2.2xlarge",
+        "m2.4xlarge",
+        "m3.medium",
+        "m3.large",
+        "m3.xlarge",
+        "m3.2xlarge",
+        "m4.large",
+        "m4.xlarge",
+        "m4.2xlarge",
+        "m4.4xlarge",
+        "m4.10xlarge",
+        "c1.medium",
+        "c1.xlarge",
+        "c3.large",
+        "c3.xlarge",
+        "c3.2xlarge",
+        "c3.4xlarge",
+        "c3.8xlarge",
+        "c4.large",
+        "c4.xlarge",
+        "c4.2xlarge",
+        "c4.4xlarge",
+        "c4.8xlarge",
+        "g2.2xlarge",
+        "r3.large",
+        "r3.xlarge",
+        "r3.2xlarge",
+        "r3.4xlarge",
+        "r3.8xlarge",
+        "i2.xlarge",
+        "i2.2xlarge",
+        "i2.4xlarge",
+        "i2.8xlarge",
+        "d2.xlarge",
+        "d2.2xlarge",
+        "d2.4xlarge",
+        "d2.8xlarge",
+        "hi1.4xlarge",
+        "hs1.8xlarge",
+        "cr1.8xlarge",
+        "cc2.8xlarge",
+        "cg1.4xlarge"
+      ],
+      "ConstraintDescription": "Must be a valid EC2 instance type."
+    },
+    "KeyName": {
+      "Description": "Select Existing Key for FTP EC2 Instances",
+      "Type": "AWS::EC2::KeyPair::KeyName",
+      "ConstraintDescription": "Must be the name of an existing EC2 KeyPair."
+    }
+  },
+  "Resources": {
+    "FTPS3Bucket": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": "p-lvlftp-beanstalk-s3",
+		"LifecycleConfiguration" : {
+        "Rules": [ { "Id" : "Move 'p-lvlftp-beanstalk-s3' Objects to Glacier in 15 Days","Status": "Enabled", "Transitions" : [{ "StorageClass" : "GLACIER", "TransitionInDays" : "15" } ] } ]
+
+					},
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "P-LVLFTP-Beanstalk-S3"
+          },
+          {
+            "Key": "AWS Service",
+            "Value": "S3Bucket"
+          }
+        ]
+      }
+    },
+    "FTPS3BucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": {
+          "Ref": "FTPS3Bucket"
+        },
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Sid": "Permission to cross account",
+              "Action": "s3:*",
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:aws:s3:::",
+                    {
+                      "Ref": "FTPS3Bucket"
+                    },
+                    "/*"
+                  ]
+                ]
+              },
+              "Principal": {
+                "AWS": [
+                  "arn:aws:iam::543104452625:root",
+				  "arn:aws:iam::190298128070:root"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "DependsOn": "FTPS3Bucket"
+    },
+    "FTPLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": "P-LVLFTP-LogGroup"
+      }
+    },
+    "FTPRolePolicies": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "P-LVLFTP-S3-Policy",
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": "s3:*",
+              "Resource": "arn:aws:s3:::p-lvlftp-beanstalk-s3/*"
+            }
+          ]
+        },
+        "Roles": [
+          {
+            "Ref": "FTPRole"
+          }
+        ]
+      }
+    },
+    "FTPRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ec2.amazonaws.com",
+                "AWS": "arn:aws:iam::848269492003:root"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/AWSElasticBeanstalkWorkerTier",
+          "arn:aws:iam::aws:policy/AWSElasticBeanstalkMulticontainerDocker",
+          "arn:aws:iam::aws:policy/AWSElasticBeanstalkWebTier",
+          "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess",
+          "arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM",
+          "arn:aws:iam::aws:policy/AWSElasticBeanstalkFullAccess"
+        ],
+        "Path": "/",
+        "RoleName": "P-LVLFTP-Role"
+      }
+    },
+    "FTPInstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Path": "/",
+        "Roles": [
+          {
+            "Ref": "FTPRole"
+          }
+        ],
+        "InstanceProfileName": "P-LVLFTP-Role"
+      }
+    },
+    "ELBSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupName": "P-LVLFTP-ELB-SG",
+        "GroupDescription": "Allow HTTP to ELB from App Servers",
+        "VpcId": {
+          "Ref": "FTPVPC"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "443",
+            "ToPort": "443",
+            "CidrIp": "10.95.243.140/32"
+          }
+        ],
+        "SecurityGroupEgress": [
+          {
+            "IpProtocol": "-1",
+            "CidrIp": "0.0.0.0/0"
+          }
+        ]
+      }
+    },
+    "FTPApplication": {
+      "Type": "AWS::ElasticBeanstalk::Application",
+      "Properties": {
+        "ApplicationName": "P-LVLFTP-APP",
+        "Description": "AWS Elastic Beanstalk FTP Application"
+      }
+    },
+    "FTPConfigurationTemplate": {
+      "Type": "AWS::ElasticBeanstalk::ConfigurationTemplate",
+      "Properties": {
+        "ApplicationName": {
+          "Ref": "FTPApplication"
+        },
+        "Description": "AWS ElasticBeanstalk FTP Configuration Template",
+        "OptionSettings": [
+          {
+            "Namespace": "aws:autoscaling:asg",
+            "OptionName": "MinSize",
+            "Value": "1"
+          },
+          {
+            "Namespace": "aws:autoscaling:asg",
+            "OptionName": "MaxSize",
+            "Value": "4"
+          },
+          {
+            "Namespace": "aws:elasticbeanstalk:environment",
+            "OptionName": "EnvironmentType",
+            "Value": "LoadBalanced"
+          },
+          {
+            "Namespace": "aws:ec2:vpc",
+            "OptionName": "VPCId",
+            "Value": {
+              "Ref": "FTPVPC"
+            }
+          },
+          {
+            "Namespace": "aws:ec2:vpc",
+            "OptionName": "ELBSubnets",
+            "Value": {
+              "Ref": "ELBSubnet"
+            }
+          },
+          {
+            "Namespace": "aws:ec2:vpc",
+            "OptionName": "Subnets",
+            "Value": {
+              "Ref": "EC2Subnet"
+            }
+          },
+          {
+            "Namespace": "aws:autoscaling:launchconfiguration",
+            "OptionName": "EC2KeyName",
+            "Value": {
+              "Ref": "KeyName"
+            }
+          },
+          {
+            "Namespace": "aws:autoscaling:launchconfiguration",
+            "OptionName": "InstanceType",
+            "Value": {
+              "Ref": "InstanceTypeFTP"
+            }
+          },
+          {
+            "Namespace": "aws:ec2:vpc",
+            "OptionName": "ELBScheme",
+            "Value": "internal"
+          },
+          {
+            "Namespace": "aws:autoscaling:launchconfiguration",
+            "OptionName": "RootVolumeSize",
+            "Value": "250"
+          },
+          {
+            "Namespace": "aws:autoscaling:launchconfiguration",
+            "OptionName": "SSHSourceRestriction",
+            "Value": "tcp, 3389, 3389, 10.95.243.140/32"
+          },
+          {
+            "Namespace": "aws:elb:loadbalancer",
+            "OptionName": "SecurityGroups",
+            "Value": {
+              "Fn::GetAtt": [
+                "ELBSecurityGroup",
+                "GroupId"
+              ]
+            }
+          },
+          {
+            "Namespace": "aws:elb:loadbalancer",
+            "OptionName": "ManagedSecurityGroup",
+            "Value": {
+              "Fn::GetAtt": [
+                "ELBSecurityGroup",
+                "GroupId"
+              ]
+            }
+          },
+          {
+            "Namespace": "aws:elb:loadbalancer",
+            "OptionName": "LoadBalancerHTTPSPort",
+            "Value": "443"
+          },
+		  {
+            "Namespace": "aws:elb:policies",
+            "OptionName": "ConnectionSettingIdleTimeout",
+            "Value": "3600"
+          },
+          {
+            "Namespace": "aws:elb:loadbalancer",
+            "OptionName": "LoadBalancerHTTPPort",
+            "Value": "OFF"
+          },
+          {
+            "Namespace": "aws:elb:loadbalancer",
+            "OptionName": "SSLCertificateId",
+            "Value": "arn:aws:iam::967089149356:server-certificate/P-LVLFTP-Certificate"
+          },
+          {
+            "Namespace": "aws:autoscaling:launchconfiguration",
+            "OptionName": "IamInstanceProfile",
+            "Value": {
+              "Ref": "FTPRole"
+            }
+          }
+        ],
+        "SolutionStackName": "64bit Windows Server 2012 R2 v1.2.0 running IIS 8.5"
+      },
+      "DependsOn": [
+        "FTPRole"
+      ]
+    },
+    "FTPEnvironment": {
+      "Type": "AWS::ElasticBeanstalk::Environment",
+      "Properties": {
+        "ApplicationName": {
+          "Ref": "FTPApplication"
+        },
+        "EnvironmentName": "P-LVLFTP-ENV",
+        "Description": "AWS ElasticBeanstalk FTP Environment",
+        "TemplateName": {
+          "Ref": "FTPConfigurationTemplate"
+        }
+      }
+    }
+  }
+}

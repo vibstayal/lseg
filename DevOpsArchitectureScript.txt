@@ -1,0 +1,712 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+ 
+"Metadata" : {
+  "AWS::CloudFormation::Interface" : {
+    "ParameterGroups" : [
+      {
+        "Label" : { "default" : "Global Name" },
+        "Parameters" : [ "ApplicationName", "EnvironmentType" ]
+      },
+      {
+        "Label" : { "default":"Network Configuration" },
+        "Parameters" : [ "PublicSubnetAZ", "PrivateSubnetAZ" ]
+      },
+
+
+{
+        "Label" : { "default":"Ec2 Configuration" },
+        "Parameters" : [ "KeyName" ]
+      },
+
+{
+        "Label" : { "default":"Database Configuration" },
+        "Parameters" : [ "DBUsername", "DBPassword"]
+      }
+
+
+
+    ]
+     }
+},
+
+"Parameters" : {
+
+ "ApplicationName": {
+      "Description": "The Application Name",
+      "Type": "String",
+      "Default": "RnR",
+      "AllowedPattern" : "[a-zA-Z][a-zA-Z0-9]*",
+      "ConstraintDescription": "Must begin with a letter and contain only alphanumeric characters."
+    },
+
+"PublicSubnetAZ":{
+ "Description": "Select AZ for your Public Subnet", 
+ "Type" : "AWS::EC2::AvailabilityZone::Name",
+"ConstraintDescription" : "Must select AZ from drop-down."
+
+},
+"PrivateSubnetAZ":{
+ "Description": "Select AZ for your Private Subnet", 
+ "Type" : "AWS::EC2::AvailabilityZone::Name",
+"ConstraintDescription" : "Must select AZ from drop-down."
+
+},
+
+ "EnvironmentType": {
+      "Description": "The environment type",
+      "Type": "String",
+      "Default": "SIT",
+      "AllowedPattern" : "[a-zA-Z][a-zA-Z0-9]*",
+      "ConstraintDescription": "Must begin with a letter and contain only alphanumeric characters."
+    },
+
+    "KeyName" : {
+	"Description": "Select Existing Key for Ec2 Instances",
+      "Type" : "AWS::EC2::KeyPair::KeyName",
+	"Default" : "DevOpsPrivateKey",
+      "ConstraintDescription" : "Must be the name of an existing EC2 KeyPair."
+    },
+
+
+ "DBUsername" : {
+ 	"Default": "admin",
+ 	"NoEcho": "false",
+ 	"Description" : "The Database username",
+ 	"Type": "String",
+ 	"MinLength": "1",
+ 	"MaxLength": "16",
+ 	"AllowedPattern" : "[a-zA-Z][a-zA-Z0-9]*",
+ 	"ConstraintDescription" : "must begin with a letter and contain only alphanumeric characters."
+ },
+ "DBPassword" : {
+ 	"NoEcho": "true",
+ 	"Description" : "The Database password",
+	"Type": "String",
+ 	"MinLength": "8",
+ 	"MaxLength": "41",
+ 	"AllowedPattern" : "[a-zA-Z0-9]*",
+ 	"ConstraintDescription" : "must contain only alphanumeric characters."
+ }
+},
+
+
+  "Resources": {
+    "VPC": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": "21.0.0.0/16",
+        "InstanceTenancy": "default",
+        "EnableDnsSupport": "true",
+        "EnableDnsHostnames": "true",
+        "Tags": [
+          {
+            "Key": "Name",
+           "Value": {"Fn::Join" : ["-", [{"Ref" : "ApplicationName"},"VPC",{"Ref" : "EnvironmentType"}]]}
+          }
+        ]
+      }
+    },
+	"PeeringConnectionwithDevOpsVPC": {
+   "Type" : "AWS::EC2::VPCPeeringConnection",
+   "Properties" : {
+      "PeerVpcId" : "vpc-2633935f",
+      "Tags" : [ {
+            "Key": "Name",
+            "Value": {"Fn::Join" : ["-", [{"Ref" : "ApplicationName"},"PeeringConnectionwithDevOpsVPC",{"Ref" : "EnvironmentType"}]]}
+          } 
+		  ],
+      "VpcId" : {"Ref": "VPC"}
+   }
+},
+"PeeringRoute1" : {
+            "Type" : "AWS::EC2::Route",
+            "Properties" : {
+                "DestinationCidrBlock": "12.0.0.0/16",
+                "RouteTableId" : { "Ref" : "DevOpsMainRouteTable" },
+                "VpcPeeringConnectionId" : { "Ref" : "PeeringConnectionwithDevOpsVPC" }
+            }
+        },  
+"PeeringRoute2" : {
+            "Type" : "AWS::EC2::Route",
+            "Properties" : {
+                "DestinationCidrBlock": "12.0.0.0/16",
+                "RouteTableId" : { "Ref" : "DevOpsCustomRouteTable" },
+                "VpcPeeringConnectionId" : { "Ref" : "PeeringConnectionwithDevOpsVPC" }
+            }
+        }, 		
+    "PublicSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "CidrBlock": "21.0.1.0/24",
+        "AvailabilityZone": { "Ref" : "PublicSubnetAZ"},
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {"Fn::Join" : ["-", [{"Ref" : "ApplicationName"},"PublicSubnet",{"Ref" : "EnvironmentType"}]]}
+          }
+        ]
+      }
+    },
+    "PrivateSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "CidrBlock": "21.0.0.0/24",
+        "AvailabilityZone": { "Ref" : "PrivateSubnetAZ"},
+        "VpcId": {
+          "Ref": "VPC"
+        },
+      
+        "Tags": [
+          {
+            "Key": "Name",
+             "Value": {"Fn::Join" : ["-", [{"Ref" : "ApplicationName"},"PrivateSubnet",{"Ref" : "EnvironmentType"}]]}
+          }
+        ]
+      }
+    },
+    "InternetGateway": {
+      "Type": "AWS::EC2::InternetGateway",
+      "Properties": {
+	  "Tags": [
+          {
+            "Key": "Name",
+           "Value": {"Fn::Join" : ["-", [{"Ref" : "ApplicationName"},"InternetGateway",{"Ref" : "EnvironmentType"}]]}
+          }
+        ]
+      }
+    },
+    "DHCP": {
+      "Type": "AWS::EC2::DHCPOptions",
+      "Properties": {
+        "DomainName": "us-west-2.compute.internal",
+        "DomainNameServers": [
+          "AmazonProvidedDNS"
+        ],
+		"Tags": [
+          {
+            "Key": "Name",
+            "Value": {"Fn::Join" : ["-", [{"Ref" : "ApplicationName"},"DHCP",{"Ref" : "EnvironmentType"}]]}
+          }
+        ]
+      }
+    },
+    "NetworkACL": {
+      "Type": "AWS::EC2::NetworkAcl",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+		"Tags": [
+          {
+            "Key": "Name",
+           "Value": {"Fn::Join" : ["-", [{"Ref" : "ApplicationName"},"NetworkACL",{"Ref" : "EnvironmentType"}]]}
+          }
+        ]
+      }
+    },
+    "DevOpsMainRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+		"Tags": [
+          {
+            "Key": "Name",
+            "Value": {"Fn::Join" : ["-", [{"Ref" : "ApplicationName"},"DevOpsMainRouteTable",{"Ref" : "EnvironmentType"}]]}
+          }
+        ]
+      }
+    },
+    "DevOpsCustomRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+		"Tags": [
+          {
+            "Key": "Name",
+             "Value": {"Fn::Join" : ["-", [{"Ref" : "ApplicationName"},"DevOpsCustomRouteTable",{"Ref" : "EnvironmentType"}]]}
+
+          }
+        ]
+      }
+    },
+    "CICD": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "DisableApiTermination": "false",
+        "InstanceInitiatedShutdownBehavior": "stop",
+        "ImageId": "ami-abf8d8bd",
+        "InstanceType": "t2.medium",
+        "KeyName": { "Ref" : "KeyName" },
+        "Monitoring": "false",
+		"UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
+        "<script>\n",
+			 "powershell.exe tzutil /s 'Pacific Standard Time' \n",
+			 "powershell.exe netsh advfirewall firewall add rule name='WinRM 5985' protocol=TCP dir=in localport=5985 action=allow \n",
+		"</script>\n"
+		]]}},
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {"Fn::Join" : ["-", [{"Ref" : "ApplicationName"},"DevOpsCICD",{"Ref" : "EnvironmentType"}]]}
+
+          }
+        ],
+        "NetworkInterfaces": [
+          {
+            "DeleteOnTermination": "true",
+            "Description": "Primary network interface",
+            "DeviceIndex": 0,
+            "SubnetId": {
+              "Ref": "PublicSubnet"
+            },
+            "GroupSet": [
+              {
+                "Ref": "DevOpsCICDSG"
+              }
+            ]
+          }
+        ]
+      }
+    },
+	"NATGateway" : {
+           "Type" : "AWS::EC2::NatGateway",                                          
+    "Properties" : {
+           "AllocationId" : { "Fn::GetAtt" : ["EIP", "AllocationId"]},
+           "SubnetId" : { "Ref" : "PublicSubnet"}
+     }
+},
+"EIP" : {
+  "Type" : "AWS::EC2::EIP",
+  "Properties" : {
+    "Domain" : "vpc"
+  }
+},
+"NATGatewayRoute" : {
+  "Type" : "AWS::EC2::Route",
+  "Properties" : {
+    "RouteTableId" : { "Ref" : "DevOpsMainRouteTable" },
+    "DestinationCidrBlock" : "0.0.0.0/0", 
+    "NatGatewayId" : { "Ref" : "NATGateway" }
+	
+  }
+},
+    "GitLab": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "DisableApiTermination": "false",
+        "InstanceInitiatedShutdownBehavior": "stop",
+        "ImageId": "ami-11f8d807",
+        "InstanceType": "t2.medium",
+         "KeyName": { "Ref" : "KeyName" },
+        "Monitoring": "false",
+        "Tags": [
+          {
+            "Key": "Name",
+             "Value": {"Fn::Join" : ["-", [{"Ref" : "ApplicationName"},"DevOpsGitLab",{"Ref" : "EnvironmentType"}]]}
+          }
+        ],
+        "NetworkInterfaces": [
+          {
+            "DeleteOnTermination": "true",
+            "Description": "Primary network interface",
+            "DeviceIndex": 0,
+            "SubnetId": {
+              "Ref": "PublicSubnet"
+            },
+            "GroupSet": [
+              {
+                "Ref": "DevopsGitLabSG"
+              }
+            ]
+          }
+        ]
+      }
+    },
+	"CICDIPAddress" : {
+      "Type" : "AWS::EC2::EIP"
+    },
+
+    "IPAssociation" : {
+      "Type" : "AWS::EC2::EIPAssociation",
+      "Properties" : {
+        "InstanceId" : { "Ref" : "CICD" },
+        "EIP" : { "Ref" : "CICDIPAddress" }
+      }
+    },
+	"GitLabIPAddress" : {
+      "Type" : "AWS::EC2::EIP"
+    },
+
+    "IPAssociate" : {
+      "Type" : "AWS::EC2::EIPAssociation",
+      "Properties" : {
+        "InstanceId" : { "Ref" : "GitLab" },
+        "EIP" : { "Ref" : "GitLabIPAddress" }
+      }
+    },
+    
+	"DBServer": {
+      "Type": "AWS::RDS::DBInstance",
+      "Properties": {
+        "AllocatedStorage": "20",
+        "AllowMajorVersionUpgrade": "false",
+        "AutoMinorVersionUpgrade": "true",
+        "DBInstanceClass": "db.t2.small",
+        "Port": "1433",
+        "StorageType": "gp2",
+        "BackupRetentionPeriod": "7",
+		"DBInstanceIdentifier" : {"Fn::Join" : ["-", [{"Ref" : "ApplicationName"},"DBServer",{"Ref" : "EnvironmentType"}]]},
+		"DBSnapshotIdentifier" : "arn:aws:rds:us-east-1:848269492003:snapshot:dev-devops-sql",
+        "MasterUsername": { "Ref" : "DBUsername" },
+        "MasterUserPassword": { "Ref" : "DBPassword" },
+        "PreferredBackupWindow": "08:38-09:08",
+        "PreferredMaintenanceWindow": "sat:07:48-sat:08:18",
+        "Engine": "sqlserver-web",
+        "EngineVersion": "13.00.2164.0.v1",
+        "LicenseModel": "license-included",
+        "OptionGroupName":{"Ref": "RDSSQLOptionGroup"},
+	    "DBParameterGroupName":{ "Ref": "RDSDBParameterGroup"},
+        "DBSubnetGroupName": {"Ref": "RDSSubnetGroup"},
+        "VPCSecurityGroups": [
+          {
+             "Ref": "DBServerSecurityGroup"
+          }
+        ]
+      }
+    },
+    "RDSSubnetGroup": {
+      "Type": "AWS::RDS::DBSubnetGroup",
+      "Properties": {
+        "DBSubnetGroupDescription": "RDS SQL SERVER EE Subnet Group",
+        "SubnetIds": [
+          {
+            "Ref": "PublicSubnet"
+          },
+          {
+            "Ref": "PrivateSubnet"
+          }
+        ],
+		"Tags": [
+          {
+            "Key": "Name",
+             "Value": {"Fn::Join" : ["-", [{"Ref" : "ApplicationName"},"RDSSubnetGroup",{"Ref" : "EnvironmentType"}]]}
+
+
+          }
+        ]
+      }
+    },
+  "RDSSQLOptionGroup": {
+  "Type": "AWS::RDS::OptionGroup",
+  "Properties": {
+    "EngineName": "sqlserver-web",
+    "MajorEngineVersion": "13.00",
+    "OptionGroupDescription": "RDS SQL Server EE option group",
+    	"Tags": [
+          {
+            "Key": "Name",
+             "Value": {"Fn::Join" : ["-", [{"Ref" : "ApplicationName"},"RDSSQLOptionGroup",{"Ref" : "EnvironmentType"}]]}
+
+
+          }
+        ]
+  }
+},
+  "RDSDBParameterGroup": {
+  "Type": "AWS::RDS::DBParameterGroup",
+  "Properties" : {
+    "Description" : "RDS SQL Server EE Parameter Group",
+     "Family": "sqlserver-web-13.0",
+	"Tags": [
+          {
+            "Key": "Name",
+             "Value": {"Fn::Join" : ["-", [{"Ref" : "ApplicationName"},"RDSDBParameterGroup",{"Ref" : "EnvironmentType"}]]}
+
+
+          }
+        ]
+   }
+},
+"DBServerSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "RDS Management",
+        "VpcId": {
+          "Ref": "VPC"
+        },
+		"Tags": [
+          {
+            "Key": "Name",
+            "Value": {"Fn::Join" : ["-", [{"Ref" : "ApplicationName"},"DBServerSecurityGroup",{"Ref" : "EnvironmentType"}]]}
+          }
+        ]
+      }
+    },
+    
+    "DevopsGitLabSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "DevOps-GitLab-SG-SIT",
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+             "Value": {"Fn::Join" : ["-", [{"Ref" : "ApplicationName"},"DevopsGitLabSG",{"Ref" : "EnvironmentType"}]]}
+          }
+        ]
+      }
+    },
+    "DevOpsCICDSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "DevOps-CICD-SG-SIT",
+        "VpcId": {
+          "Ref": "VPC"
+        },
+		 "Tags": [
+          {
+            "Key": "Name",
+             "Value": {"Fn::Join" : ["-", [{"Ref" : "ApplicationName"},"DevOpsCICDSG",{"Ref" : "EnvironmentType"}]]}
+          }
+        ]
+      }
+    }, 
+    "acl1": {
+      "Type": "AWS::EC2::NetworkAclEntry",
+      "Properties": {
+        "CidrBlock": "0.0.0.0/0",
+        "Egress": "true",
+        "Protocol": "-1",
+        "RuleAction": "allow",
+        "RuleNumber": "100",
+        "NetworkAclId": {
+          "Ref": "NetworkACL"
+        }
+      }
+    },
+    "acl2": {
+      "Type": "AWS::EC2::NetworkAclEntry",
+      "Properties": {
+        "CidrBlock": "0.0.0.0/0",
+        "Egress": "true",
+        "Protocol": "-1",
+        "RuleAction": "allow",
+        "RuleNumber": "119",
+        "NetworkAclId": {
+          "Ref": "NetworkACL"
+        }
+      }
+    },
+    "acl3": {
+      "Type": "AWS::EC2::NetworkAclEntry",
+      "Properties": {
+        "CidrBlock": "0.0.0.0/0",
+        "Protocol": "-1",
+        "RuleAction": "allow",
+        "RuleNumber": "100",
+        "NetworkAclId": {
+          "Ref": "NetworkACL"
+        }
+      }
+    },
+    "acl4": {
+      "Type": "AWS::EC2::NetworkAclEntry",
+      "Properties": {
+        "CidrBlock": "0.0.0.0/0",
+        "Protocol": "-1",
+        "RuleAction": "allow",
+        "RuleNumber": "103",
+        "NetworkAclId": {
+          "Ref": "NetworkACL"
+        }
+      }
+    },
+    "PublicSubnetAssociation": {
+      "Type": "AWS::EC2::SubnetNetworkAclAssociation",
+      "Properties": {
+        "NetworkAclId": {
+          "Ref": "NetworkACL"
+        },
+        "SubnetId": {
+          "Ref": "PublicSubnet"
+        }
+      }
+    },
+    "PrivateSubnetAssociation": {
+      "Type": "AWS::EC2::SubnetNetworkAclAssociation",
+      "Properties": {
+        "NetworkAclId": {
+          "Ref": "NetworkACL"
+        },
+        "SubnetId": {
+          "Ref": "PrivateSubnet"
+        }
+      }
+    },
+    "AttachInternetGatewayInVPC": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "InternetGatewayId": {
+          "Ref": "InternetGateway"
+        }
+      }
+    },
+    "MainRouteTablePrivateSubnetAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "DevOpsMainRouteTable"
+        },
+        "SubnetId": {
+          "Ref": "PrivateSubnet"
+        }
+      }
+    },
+    "CustomRouteTablePublicSubnetAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "DevOpsCustomRouteTable"
+        },
+        "SubnetId": {
+          "Ref": "PublicSubnet"
+        }
+      }
+    },
+    
+    "CustomRouteTableRoutes": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "RouteTableId": {
+          "Ref": "DevOpsCustomRouteTable"
+        },
+        "GatewayId": {
+          "Ref": "InternetGateway"
+        }
+      },
+      "DependsOn": "AttachInternetGatewayInVPC"
+    },
+    
+    "VPCDHCPAssociation": {
+      "Type": "AWS::EC2::VPCDHCPOptionsAssociation",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "DhcpOptionsId": {
+          "Ref": "DHCP"
+        }
+      }
+    },
+   
+    "ingress1": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "DevopsGitLabSG"
+        },
+        "IpProtocol": "tcp",
+        "FromPort": "80",
+        "ToPort": "80",
+        "CidrIp": "0.0.0.0/0"
+      }
+    },
+    "ingress2": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "DevopsGitLabSG"
+        },
+        "IpProtocol": "tcp",
+        "FromPort": "22",
+        "ToPort": "22",
+        "CidrIp": "0.0.0.0/0"
+      }
+    },
+  
+    "ingress3": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "DevOpsCICDSG"
+        },
+        "IpProtocol": "tcp",
+        "FromPort": "3389",
+        "ToPort": "3389",
+		"CidrIp": "0.0.0.0/0"
+    }
+    },
+   "InboundRule1RDS": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "DBServerSecurityGroup"
+        },
+        "IpProtocol": "tcp",
+        "FromPort": "1433",
+        "ToPort": "1433",
+        "SourceSecurityGroupId" : { "Ref" : "DevopsGitLabSG" }
+
+      }
+    },
+	"InboundRule2RDS": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "DBServerSecurityGroup"
+        },
+        "IpProtocol": "tcp",
+        "FromPort": "1433",
+        "ToPort": "1433",
+        "SourceSecurityGroupId" : { "Ref" : "DevOpsCICDSG" }
+
+      }
+    },
+ 
+    "egress1": {
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "DevopsGitLabSG"
+        },
+        "IpProtocol": "-1",
+        "CidrIp": "0.0.0.0/0"
+      }
+    },
+    "egress2": {
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "DevOpsCICDSG"
+        },
+        "IpProtocol": "-1",
+        "CidrIp": "0.0.0.0/0"
+      }
+    },
+	"OutboundRuleRDS": {
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "DBServerSecurityGroup"
+        },
+        "IpProtocol": "-1",
+        "CidrIp": "0.0.0.0/0"
+      }
+    }
+  },
+  "Description": "Infrastructure Setup for DevOps Tools"
+}
